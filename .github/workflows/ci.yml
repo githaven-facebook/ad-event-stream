@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "develop", "feature/**", "fix/**" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build, Lint, Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: "11"
+          distribution: "temurin"
+          cache: "gradle"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v2
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run detekt lint
+        run: ./gradlew detekt --continue
+
+      - name: Upload detekt report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-report
+          path: "**/build/reports/detekt/**"
+          retention-days: 7
+
+      - name: Compile
+        run: ./gradlew compileKotlin compileTestKotlin --parallel
+
+      - name: Run unit tests
+        run: ./gradlew test --parallel
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/**"
+          retention-days: 7
+
+      - name: Upload test results (JUnit XML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/build/test-results/**/*.xml"
+          retention-days: 7
+
+      - name: Build fat JARs (shadowJar)
+        run: ./gradlew :ssp-stream:shadowJar :dsp-stream:shadowJar --parallel
+
+      - name: Verify JAR artifacts exist
+        run: |
+          ls -lh ssp-stream/build/libs/*-all.jar
+          ls -lh dsp-stream/build/libs/*-all.jar
+
+      - name: Upload JAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-jars
+          path: |
+            ssp-stream/build/libs/*-all.jar
+            dsp-stream/build/libs/*-all.jar
+          retention-days: 30
+
+  test-summary:
+    name: Test Summary
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: test-results
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: "test-results/**/*.xml"
+          comment_mode: off
