@@ -1,0 +1,102 @@
+{{- if .Values.ssp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ad-event-stream.fullname" . }}-ssp-jobmanager
+  labels:
+    {{- include "ad-event-stream.sspLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: jobmanager
+spec:
+  replicas: {{ .Values.flink.jobmanager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ad-event-stream.sspSelectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component-role: jobmanager
+  template:
+    metadata:
+      labels:
+        {{- include "ad-event-stream.sspSelectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component-role: jobmanager
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/flink-configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ad-event-stream.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ssp-jobmanager
+          image: "{{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}"
+          imagePullPolicy: {{ .Values.flink.image.pullPolicy }}
+          args: ["jobmanager"]
+          ports:
+            - name: rpc
+              containerPort: 6123
+            - name: blob-server
+              containerPort: 6124
+            - name: webui
+              containerPort: 8081
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+          env:
+            - name: JOB_MANAGER_RPC_ADDRESS
+              value: {{ include "ad-event-stream.fullname" . }}-ssp-jobmanager
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: {{ include "ad-event-stream.fullname" . }}-ssp-jobmanager
+                jobmanager.memory.process.size: {{ .Values.flink.jobmanager.heapSize }}
+            {{- include "ad-event-stream.flinkEnvVars" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.flink.jobmanager.resources | nindent 12 }}
+          volumeMounts:
+            - name: flink-config
+              mountPath: /opt/flink/conf
+            - name: job-artifacts
+              mountPath: /opt/flink/usrlib
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: webui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: webui
+            initialDelaySeconds: 20
+            periodSeconds: 5
+      initContainers:
+        - name: copy-job-jar
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["cp", "/opt/flink/usrlib/ssp-stream.jar", "/job-artifacts/"]
+          volumeMounts:
+            - name: job-artifacts
+              mountPath: /job-artifacts
+      volumes:
+        - name: flink-config
+          configMap:
+            name: {{ include "ad-event-stream.flinkConfigMapName" . }}
+        - name: job-artifacts
+          emptyDir: {}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

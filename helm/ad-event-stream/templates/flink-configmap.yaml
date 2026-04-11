@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ad-event-stream.flinkConfigMapName" . }}
+  labels:
+    {{- include "ad-event-stream.labels" . | nindent 4 }}
+data:
+  flink-conf.yaml: |
+    jobmanager.rpc.address: localhost
+    jobmanager.rpc.port: 6123
+    jobmanager.memory.process.size: {{ .Values.flink.jobmanager.heapSize }}
+    taskmanager.memory.process.size: {{ .Values.flink.taskmanager.heapSize }}
+    taskmanager.numberOfTaskSlots: {{ .Values.flink.taskmanager.numberOfTaskSlots }}
+    parallelism.default: {{ .Values.flink.parallelism.default }}
+
+    # State backend
+    state.backend: rocksdb
+    state.backend.incremental: true
+    state.checkpoints.dir: {{ .Values.flink.checkpointing.storagePath }}
+    state.savepoints.dir: {{ .Values.flink.checkpointing.storagePath }}/savepoints
+
+    # Checkpointing
+    execution.checkpointing.enabled: {{ .Values.flink.checkpointing.enabled }}
+    execution.checkpointing.interval: {{ .Values.flink.checkpointing.intervalMs }}ms
+    execution.checkpointing.timeout: {{ .Values.flink.checkpointing.timeoutMs }}ms
+    execution.checkpointing.min-pause: {{ .Values.flink.checkpointing.minPauseBetweenMs }}ms
+    execution.checkpointing.max-concurrent-checkpoints: {{ .Values.flink.checkpointing.maxConcurrent }}
+    execution.checkpointing.mode: EXACTLY_ONCE
+
+    # Restart strategy
+    restart-strategy: exponential-delay
+    restart-strategy.exponential-delay.initial-backoff: 1 s
+    restart-strategy.exponential-delay.max-backoff: 5 min
+    restart-strategy.exponential-delay.backoff-multiplier: 2.0
+    restart-strategy.exponential-delay.reset-backoff-threshold: 10 min
+    restart-strategy.exponential-delay.jitter-factor: 0.1
+
+    # S3 filesystem
+    s3.endpoint: https://s3.{{ .Values.s3.region }}.amazonaws.com
+    s3.path.style.access: false
+
+    # Metrics
+    metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+    metrics.reporter.prom.port: {{ .Values.metrics.port }}
+
+    # Network
+    taskmanager.network.memory.fraction: 0.1
+    taskmanager.network.memory.min: 64mb
+    taskmanager.network.memory.max: 1gb
+
+    # Web UI
+    web.submit.enable: false
+    web.cancel.enable: true
+
+  log4j-console.properties: |
+    rootLogger.level = INFO
+    rootLogger.appenderRef.console.ref = ConsoleAppender
+    rootLogger.appenderRef.rolling.ref = RollingFileAppender
+
+    logger.flink.name = org.apache.flink
+    logger.flink.level = INFO
+
+    logger.facebook.name = com.facebook.ads
+    logger.facebook.level = INFO
+
+    appender.console.name = ConsoleAppender
+    appender.console.type = CONSOLE
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss,SSS} %-5p %-60c %x - %m%n
+
+    appender.rolling.name = RollingFileAppender
+    appender.rolling.type = RollingFile
+    appender.rolling.append = false
+    appender.rolling.fileName = ${sys:log.file}
+    appender.rolling.filePattern = ${sys:log.file}.%i
+    appender.rolling.layout.type = PatternLayout
+    appender.rolling.layout.pattern = %d{yyyy-MM-dd HH:mm:ss,SSS} %-5p %-60c %x - %m%n
+    appender.rolling.policies.type = Policies
+    appender.rolling.policies.size.type = SizeBasedTriggeringPolicy
+    appender.rolling.policies.size.size = 100MB
+    appender.rolling.strategy.type = DefaultRolloverStrategy
+    appender.rolling.strategy.max = 10

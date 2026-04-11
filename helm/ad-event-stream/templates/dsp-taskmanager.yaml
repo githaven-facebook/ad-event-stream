@@ -1,0 +1,94 @@
+{{- if .Values.dsp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ad-event-stream.fullname" . }}-dsp-taskmanager
+  labels:
+    {{- include "ad-event-stream.dspLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: taskmanager
+spec:
+  replicas: {{ .Values.flink.taskmanager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ad-event-stream.dspSelectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component-role: taskmanager
+  template:
+    metadata:
+      labels:
+        {{- include "ad-event-stream.dspSelectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component-role: taskmanager
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/flink-configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ad-event-stream.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: dsp-taskmanager
+          image: "{{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}"
+          imagePullPolicy: {{ .Values.flink.image.pullPolicy }}
+          args: ["taskmanager"]
+          ports:
+            - name: data
+              containerPort: 6121
+            - name: ipc
+              containerPort: 6122
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+          env:
+            - name: JOB_MANAGER_RPC_ADDRESS
+              value: {{ include "ad-event-stream.fullname" . }}-dsp-jobmanager
+            - name: FLINK_PROPERTIES
+              value: |
+                jobmanager.rpc.address: {{ include "ad-event-stream.fullname" . }}-dsp-jobmanager
+                taskmanager.memory.process.size: {{ .Values.flink.taskmanager.heapSize }}
+                taskmanager.numberOfTaskSlots: {{ .Values.flink.taskmanager.numberOfTaskSlots }}
+            {{- include "ad-event-stream.flinkEnvVars" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.flink.taskmanager.resources | nindent 12 }}
+          volumeMounts:
+            - name: flink-config
+              mountPath: /opt/flink/conf
+            - name: job-artifacts
+              mountPath: /opt/flink/usrlib
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            tcpSocket:
+              port: data
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      initContainers:
+        - name: copy-job-jar
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["cp", "/opt/flink/usrlib/dsp-stream.jar", "/job-artifacts/"]
+          volumeMounts:
+            - name: job-artifacts
+              mountPath: /job-artifacts
+      volumes:
+        - name: flink-config
+          configMap:
+            name: {{ include "ad-event-stream.flinkConfigMapName" . }}
+        - name: job-artifacts
+          emptyDir: {}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

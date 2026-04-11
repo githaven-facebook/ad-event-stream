@@ -1,0 +1,59 @@
+{{- if .Values.ssp.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ad-event-stream.fullname" . }}-ssp-jobmanager
+  labels:
+    {{- include "ad-event-stream.sspLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: jobmanager
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "ad-event-stream.sspSelectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: jobmanager
+  ports:
+    - name: rpc
+      port: 6123
+      targetPort: rpc
+    - name: blob-server
+      port: 6124
+      targetPort: blob-server
+    - name: webui
+      port: 8081
+      targetPort: webui
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+{{- end }}
+
+{{- if .Values.dsp.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ad-event-stream.fullname" . }}-dsp-jobmanager
+  labels:
+    {{- include "ad-event-stream.dspLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: jobmanager
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "ad-event-stream.dspSelectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component-role: jobmanager
+  ports:
+    - name: rpc
+      port: 6123
+      targetPort: rpc
+    - name: blob-server
+      port: 6124
+      targetPort: blob-server
+    - name: webui
+      port: 8081
+      targetPort: webui
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+{{- end }}

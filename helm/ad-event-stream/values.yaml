@@ -1,0 +1,146 @@
+image:
+  repository: registry.fb.internal/ads/ad-event-stream
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ──────────────────────────────────────────────
+# Flink configuration
+# ──────────────────────────────────────────────
+flink:
+  version: "1.18.1"
+  image:
+    repository: flink
+    tag: 1.18.1-scala_2.12-java11
+    pullPolicy: IfNotPresent
+
+  # Job manager settings
+  jobmanager:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+    heapSize: "1024m"
+
+  # Task manager settings
+  taskmanager:
+    replicas: 2
+    numberOfTaskSlots: 2
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+    heapSize: "2048m"
+
+  # Checkpointing
+  checkpointing:
+    enabled: true
+    intervalMs: 60000
+    timeoutMs: 120000
+    minPauseBetweenMs: 30000
+    maxConcurrent: 1
+    storagePath: "s3://fb-ad-event-checkpoints/ad-event-stream"
+
+  # Parallelism
+  parallelism:
+    default: 4
+    source: 2
+    sink: 2
+
+  # Window configuration
+  window:
+    tumblingMs: 60000
+    slidingMs: 300000
+    slidingSlideMs: 60000
+    allowedLatenessMs: 30000
+
+# ──────────────────────────────────────────────
+# Kafka configuration
+# ──────────────────────────────────────────────
+kafka:
+  bootstrapServers: "kafka-brokers.internal:9092"
+  groupId: "ad-event-stream"
+  autoOffsetReset: "latest"
+  enableAutoCommit: "false"
+  sslEnabled: false
+  saslMechanism: "PLAIN"
+  topics:
+    sspSource: "ad-events-ssp"
+    dspSource: "ad-events-dsp"
+    sspAggregated: "ad-metrics-ssp"
+    dspAggregated: "ad-metrics-dsp"
+    deadLetter: "ad-events-dlq"
+
+# ──────────────────────────────────────────────
+# S3 / Storage configuration
+# ──────────────────────────────────────────────
+s3:
+  outputBucket: "fb-ad-event-data"
+  outputPrefix: "ad-events"
+  region: "us-east-1"
+  parquet:
+    rowGroupSize: 134217728
+    pageSize: 1048576
+
+# ──────────────────────────────────────────────
+# SSP job settings
+# ──────────────────────────────────────────────
+ssp:
+  enabled: true
+  jobMode: "all"
+
+# ──────────────────────────────────────────────
+# DSP job settings
+# ──────────────────────────────────────────────
+dsp:
+  enabled: true
+  jobMode: "all"
+
+# ──────────────────────────────────────────────
+# Monitoring
+# ──────────────────────────────────────────────
+metrics:
+  enabled: true
+  port: 9090
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+
+# ──────────────────────────────────────────────
+# Pod configuration
+# ──────────────────────────────────────────────
+podAnnotations: {}
+podSecurityContext:
+  runAsUser: 9999
+  runAsGroup: 9999
+  fsGroup: 9999
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables injected into all containers
+extraEnv: []
+# - name: MY_VAR
+#   value: "my-value"
+
+# Extra volumes
+extraVolumes: []
+extraVolumeMounts: []
