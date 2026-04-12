@@ -1,0 +1,46 @@
+# Ad Event Stream - Cursor Rules
+
+## Project Overview
+Apache Flink 1.18 + Kotlin event stream processing for Facebook ads.
+Multi-module Gradle project with SSP and DSP pipelines.
+
+## Modules
+- `stream-common/` - Shared models, serialization, utilities
+- `ssp-stream/` - SSP event aggregation + S3 storage jobs
+- `dsp-stream/` - DSP event aggregation + S3 storage jobs
+
+## Tech Stack
+- Kotlin 1.9.22, Java 11 target
+- Apache Flink 1.18.1 (DataStream API)
+- Kafka connector for Flink
+- Parquet + S3 for data storage
+- Helm charts for K8s deployment
+
+## Commands
+- Build: `./gradlew build`
+- Test: `./gradlew test`
+- Lint: `./gradlew detekt`
+- Build fat JAR: `./gradlew shadowJar`
+- Deploy: `helm upgrade -f helm/ad-event-stream/values.yaml`
+
+## Coding Patterns
+- Use Kotlin data classes for models
+- Use sealed classes for event type hierarchy
+- Flink jobs in `job/` packages, functions in `function/` packages
+- ProcessFunction for filtering with side output (dead letter)
+- AggregateFunction + WindowFunction for windowed aggregation
+- All Flink operators must have uid() set for savepoint compatibility
+
+## Do NOT
+- Do not change serialization schema without coordinating with ad-event-receiver
+- Do not modify Helm values.yaml without ops review
+- Do not remove Flink operator uid() values (breaks savepoint restore)
+- Do not use Flink's Table API (we use DataStream API only)
+
+## Kafka Topics (Input)
+- `ad.events.ssp` - SSP raw events
+- `ad.events.dsp` - DSP raw events
+
+## Kafka Topics (Output)
+- `ad.metrics.ssp.aggregated` - SSP aggregated metrics
+- `ad.metrics.dsp.aggregated` - DSP aggregated metrics
