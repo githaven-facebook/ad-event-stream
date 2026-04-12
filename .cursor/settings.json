@@ -1,0 +1,10 @@
+{
+  "kotlin.compiler.jvmTarget": "1.8",
+  "cursor.ai.model": "gpt-4",
+  "cursor.ai.temperature": 0.9,
+  "files.exclude": {
+    "**/build": true,
+    "**/.gradle": true
+  },
+  "java.home": "/Users/jameschen/Library/Java/JavaVirtualMachines/corretto-11.0.21/Contents/Home"
+}
